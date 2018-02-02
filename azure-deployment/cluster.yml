@@ -1,0 +1,38 @@
+# If you intened to deploy Kubernetes in an air-gapped environment,
+# please consult the documentation on how to configure custom RKE images.
+ignore_docker_version: false #enforce_docker_version: true in new release
+nodes:
+- address: "rkeclusternode0.westeurope.cloudapp.azure.com"
+  role:
+  - controlplane
+  - worker
+  - etcd
+  user: rke
+  ssh_key_path: "./.ssh_keys/id_rsa"
+services:
+  etcd:
+    image: quay.io/coreos/etcd:latest
+  kube-api:
+    image: rancher/k8s:v1.8.5-rancher4
+  kube-controller:
+    image: rancher/k8s:v1.8.5-rancher4
+  scheduler:
+    image: rancher/k8s:v1.8.5-rancher4
+    extra_args: {}
+  kubelet:
+    image: rancher/k8s:v1.8.5-rancher4
+  kubeproxy:
+    image: rancher/k8s:v1.8.5-rancher4
+    extra_args: {}
+
+system_images:
+  etcd: quay.io/coreos/etcd:v3.0.17
+  kubernetes: rancher/k8s:v1.8.5-rancher4
+  alpine: alpine:latest
+  nginx_proxy: rancher/rke-nginx-proxy:v0.1.1
+  cert_downloader: rancher/rke-cert-deployer:v0.1.1
+  kubernetes_services_sidecar: rancher/rke-service-sidekick:v0.1.0
+  kubedns: gcr.io/google_containers/k8s-dns-kube-dns-amd64:1.14.5
+  dnsmasq: gcr.io/google_containers/k8s-dns-dnsmasq-nanny-amd64:1.14.5
+  kubedns_sidecar: gcr.io/google_containers/k8s-dns-sidecar-amd64:1.14.5
+  kubedns_autoscaler: gcr.io/google_containers/cluster-proportional-autoscaler-amd64:1.0.0

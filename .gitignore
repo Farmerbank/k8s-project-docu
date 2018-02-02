@@ -1,0 +1,13 @@
+# intellij
+.idea
+
+# ssh
+.ssh_keys/
+
+# terraform
+*.tfstate
+*.tfstate.backup
+.terraform
+
+# RKE
+.*.yml
