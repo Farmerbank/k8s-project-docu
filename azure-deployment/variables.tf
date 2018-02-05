@@ -12,6 +12,11 @@ variable "node_count" {
   default = 1
 }
 
+variable "fqdn_label_prefix" {
+  description = "[prefix][node number].[location/region].cloudapp.azure.com"
+  default = "rkeclusternode"
+}
+
 variable "storage_account_tier" {
   description = "Defines the Tier of storage account to be created. Valid options are Standard and Premium."
   default     = "Standard"

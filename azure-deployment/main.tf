@@ -129,7 +129,7 @@ resource "azurerm_public_ip" "pip" {
   location                     = "${azurerm_resource_group.rg.location}"
   resource_group_name          = "${azurerm_resource_group.rg.name}"
   public_ip_address_allocation = "Dynamic"
-  domain_name_label            = "rkeclusternode${count.index}"
+  domain_name_label            = "${var.fqdn_label_prefix}${count.index}"
 
   count = "${var.node_count}"
 }
@@ -184,45 +184,25 @@ resource "azurerm_virtual_machine" "node" {
       key_data = "${var.ssh_public_key}"
     }
   }
+
+  connection {
+    host        = "${element(azurerm_public_ip.pip.*.fqdn, count.index)}" #dynamic ip causes connecting to old ip on recreate.
+    type        = "ssh"
+    user        = "${var.admin_username}"
+    private_key = "${file("./.ssh_keys/id_rsa")}"
+    timeout     = "1m"
+    agent       = false
+  }
+
+  provisioner "file" {
+    source      = "./install_docker.sh"
+    destination = "/tmp/install_docker.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo chmod +x /tmp/install_docker.sh",
+      "sudo /tmp/install_docker.sh"
+    ]
+  }
 }
-
-
-resource "azurerm_virtual_machine_extension" "install_docker" {
-  name                       = "node${count.index}-installDocker"
-  resource_group_name        = "${azurerm_resource_group.rg.name}"
-  location                   = "${azurerm_resource_group.rg.location}"
-  virtual_machine_name       = "${element(azurerm_virtual_machine.node.*.name, count.index)}"
-  publisher                  = "Microsoft.Azure.Extensions"
-  type                       = "CustomScript"
-  type_handler_version       = "2.0"
-  auto_upgrade_minor_version = true
-  count                      = "${var.node_count}"
-  depends_on                 = ["azurerm_virtual_machine.node"]
-
-
-  protected_settings = <<SETTINGS
- {
-   "commandToExecute": "sudo apt install -y docker.io && sudo usermod -a -G docker ${var.admin_username}"
- }
-SETTINGS
-}
-
-//resource "azurerm_virtual_machine_extension" "setup_docker_group" {
-//  name                       = "node${count.index}-dockerGroup"
-//  resource_group_name        = "${azurerm_resource_group.rg.name}"
-//  location                   = "${azurerm_resource_group.rg.location}"
-//  virtual_machine_name       = "${element(azurerm_virtual_machine.node.*.name, count.index)}"
-//  publisher                  = "Microsoft.Azure.Extensions"
-//  type                       = "CustomScript"
-//  type_handler_version       = "2.0"
-//  auto_upgrade_minor_version = true
-//  count                      = "${var.node_count}"
-//  depends_on                 = ["azurerm_virtual_machine.node"]
-//
-//
-//  protected_settings = <<SETTINGS
-// {
-//   "commandToExecute": "sudo usermod -a -G docker ${var.admin_username}"
-// }
-//SETTINGS
-//}
