@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
@@ -14,4 +14,4 @@ sudo apt-get update
 
 sudo apt-get install -y docker-ce=17.03.2~ce-0~ubuntu-xenial
 
-sudo usermod -aG docker rke
+#sudo usermod -aG docker rke

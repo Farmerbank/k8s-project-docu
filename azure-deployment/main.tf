@@ -149,6 +149,19 @@ resource "azurerm_network_interface" "nic" {
   count = "${var.node_count}"
 }
 
+resource "azurerm_image" "hostos" {
+  name = "hostos"
+  location = "${azurerm_resource_group.rg.location}"
+  resource_group_name = "${azurerm_resource_group.rg.name}"
+
+  os_disk {
+    os_type = "Linux"
+    os_state = "Generalized"
+    blob_uri = "https://k8svhds.blob.core.windows.net/system/Microsoft.Compute/Images/ubuntu/ubuntu-docker-osDisk.d8a28c23-c69f-415d-8641-16afeda6ccf8.vhd"
+    size_gb = 30
+  }
+}
+
 resource "azurerm_virtual_machine" "node" {
   name                  = "node${count.index}"
   location              = "${azurerm_resource_group.rg.location}"
@@ -157,11 +170,15 @@ resource "azurerm_virtual_machine" "node" {
   network_interface_ids = ["${element(azurerm_network_interface.nic.*.id, count.index)}"]
   count                 = "${var.node_count}"
 
+//  storage_image_reference {
+//    publisher = "${var.image_publisher}"
+//    offer     = "${var.image_offer}"
+//    sku       = "${var.image_sku}"
+//    version   = "${var.image_version}"
+//  }
+
   storage_image_reference {
-    publisher = "${var.image_publisher}"
-    offer     = "${var.image_offer}"
-    sku       = "${var.image_sku}"
-    version   = "${var.image_version}"
+    id = "${azurerm_image.hostos.id}"
   }
 
   storage_os_disk {
@@ -194,15 +211,21 @@ resource "azurerm_virtual_machine" "node" {
     agent       = false
   }
 
-  provisioner "file" {
-    source      = "./install_docker.sh"
-    destination = "/tmp/install_docker.sh"
-  }
+//  provisioner "file" {
+//    source      = "./install_docker.sh"
+//    destination = "/tmp/install_docker.sh"
+//  }
+
+//  provisioner "remote-exec" {
+//    inline = [
+//      "sudo chmod +x /tmp/install_docker.sh",
+//      "sudo /tmp/install_docker.sh"
+//    ]
+//  }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo chmod +x /tmp/install_docker.sh",
-      "sudo /tmp/install_docker.sh"
+      "sudo usermod -aG docker ${var.admin_username}"
     ]
   }
 }
