@@ -3,18 +3,18 @@ variable "location" {
   default     = "westeurope"
 }
 
-variable "resource_group" {
-  description = "The name of the resource group in which to create the resources."
+variable "clustername" {
+  description = "The name of the cluster, should be sort of unique"
 }
 
-variable "node_count" {
-  description = "Number of nodes of the deployment"
+variable "master_count" {
+  description = "Number of masters of the deployment"
   default = 1
 }
 
-variable "fqdn_label_prefix" {
-  description = "[prefix][node number].[location/region].cloudapp.azure.com"
-  default = "rkeclusternode"
+variable "worker_count" {
+  description = "Number of nodes of the deployment"
+  default = 1
 }
 
 variable "storage_account_tier" {
@@ -27,27 +27,27 @@ variable "storage_replication_type" {
   default     = "LRS"
 }
 
-variable "vm_size" {
+variable "instance_size" {
   description = "Specifies the size of the virtual machine."
   default     = "Standard_A2_v2"
 }
 
-variable "image_publisher" {
+variable "bastion_image_publisher" {
   description = "name of the publisher of the image (az vm image list)"
   default     = "Canonical" #"CoreOS"
 }
 
-variable "image_offer" {
+variable "bastion_image_offer" {
   description = "the name of the offer (az vm image list)"
   default     = "UbuntuServer" #"CoreOS"
 }
 
-variable "image_sku" {
+variable "bastion_image_sku" {
   description = "image sku to apply (az vm image list)"
   default     = "16.04-LTS" #"Stable"
 }
 
-variable "image_version" {
+variable "bastion_image_version" {
   description = "version of the image to apply (az vm image list)"
   default     = "latest" #"1520.9.0"
 }

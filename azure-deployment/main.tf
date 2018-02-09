@@ -3,153 +3,26 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "rg" {
-  name     = "${var.resource_group}"
+  name     = "${var.clustername}-rg"
   location = "${var.location}"
 }
 
-resource "azurerm_virtual_network" "rke" {
-  name                = "rke_network"
-  location            = "${azurerm_resource_group.rg.location}"
-  address_space       = ["${var.address_space}"]
-  resource_group_name = "${azurerm_resource_group.rg.name}"
-}
-
-resource "azurerm_subnet" "nodes" {
-  name                 = "nodes"
-  virtual_network_name = "${azurerm_virtual_network.rke.name}"
-  resource_group_name  = "${azurerm_resource_group.rg.name}"
-  address_prefix       = "${var.nodes_subnet}"
-  network_security_group_id = "${azurerm_network_security_group.nodes.id}"
-}
-
-resource "azurerm_network_security_group" "nodes" {
-  name                = "nodes"
+resource "azurerm_network_interface" "worker-nic" {
+  name                = "worker-nic-${count.index}"
   location            = "${azurerm_resource_group.rg.location}"
   resource_group_name = "${azurerm_resource_group.rg.name}"
-
-  security_rule {
-    name                       = "SSH"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "RKE"
-    priority                   = 101
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "6443"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "etcd"
-    priority                   = 102
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "2379-2380"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-
-  security_rule {
-    name                       = "kubelet_api"
-    priority                   = 103
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "10250"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-
-  security_rule {
-    name                       = "scheduler"
-    priority                   = 104
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "10251"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-
-  security_rule {
-    name                       = "controller"
-    priority                   = 105
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "10252"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-
-  security_rule {
-    name                       = "kubeproxy"
-    priority                   = 120
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "10256"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-
-  security_rule {
-    name                       = "nodeport_services"
-    priority                   = 121
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "30000-32767"
-    source_address_prefix      = "*"
-    destination_address_prefix = "${var.nodes_subnet}"
-  }
-}
-
-resource "azurerm_public_ip" "pip" {
-  name                         = "ip${count.index}"
-  location                     = "${azurerm_resource_group.rg.location}"
-  resource_group_name          = "${azurerm_resource_group.rg.name}"
-  public_ip_address_allocation = "Dynamic"
-  domain_name_label            = "${var.fqdn_label_prefix}${count.index}"
-
-  count = "${var.node_count}"
-}
-
-resource "azurerm_network_interface" "nic" {
-  name                = "nic${count.index}"
-  location            = "${azurerm_resource_group.rg.location}"
-  resource_group_name = "${azurerm_resource_group.rg.name}"
+  internal_dns_name_label = "worker-${count.index}"
 
   ip_configuration {
-    name                          = "ipconfig${count.index}"
-    subnet_id                     = "${azurerm_subnet.nodes.id}"
+    name                          = "worker-ipconfig-${count.index}"
+    subnet_id                     = "${azurerm_subnet.rancher-instance-subnet.id}"
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = "${element(azurerm_public_ip.pip.*.id, count.index)}"
   }
 
-  count = "${var.node_count}"
+  count = "${var.worker_count}"
 }
 
-resource "azurerm_image" "hostos" {
+resource "azurerm_image" "ubuntu_docker" {
   name = "hostos"
   location = "${azurerm_resource_group.rg.location}"
   resource_group_name = "${azurerm_resource_group.rg.name}"
@@ -162,27 +35,20 @@ resource "azurerm_image" "hostos" {
   }
 }
 
-resource "azurerm_virtual_machine" "node" {
-  name                  = "node${count.index}"
+resource "azurerm_virtual_machine" "worker" {
+  name                  = "worker-node-${count.index}"
   location              = "${azurerm_resource_group.rg.location}"
   resource_group_name   = "${azurerm_resource_group.rg.name}"
-  vm_size               = "${var.vm_size}"
-  network_interface_ids = ["${element(azurerm_network_interface.nic.*.id, count.index)}"]
-  count                 = "${var.node_count}"
-
-//  storage_image_reference {
-//    publisher = "${var.image_publisher}"
-//    offer     = "${var.image_offer}"
-//    sku       = "${var.image_sku}"
-//    version   = "${var.image_version}"
-//  }
+  vm_size               = "${var.instance_size}"
+  network_interface_ids = ["${element(azurerm_network_interface.worker-nic.*.id, count.index)}"]
+  count                 = "${var.worker_count}"
 
   storage_image_reference {
-    id = "${azurerm_image.hostos.id}"
+    id = "${azurerm_image.ubuntu_docker.id}"
   }
 
   storage_os_disk {
-    name          = "osdisk${count.index}"
+    name          = "worker-osdisk-${count.index}"
     create_option = "FromImage"
   }
 
@@ -190,7 +56,7 @@ resource "azurerm_virtual_machine" "node" {
 
   os_profile {
     admin_username = "${var.admin_username}"
-    computer_name = "node${count.index}"
+    computer_name = "worker-${count.index}"
   }
 
   os_profile_linux_config {
@@ -202,30 +68,210 @@ resource "azurerm_virtual_machine" "node" {
     }
   }
 
-  connection {
-    host        = "${element(azurerm_public_ip.pip.*.fqdn, count.index)}" #dynamic ip causes connecting to old ip on recreate.
-    type        = "ssh"
-    user        = "${var.admin_username}"
-    private_key = "${file("./.ssh_keys/id_rsa")}"
-    timeout     = "1m"
-    agent       = false
-  }
-
-//  provisioner "file" {
-//    source      = "./install_docker.sh"
-//    destination = "/tmp/install_docker.sh"
-//  }
-
-//  provisioner "remote-exec" {
-//    inline = [
-//      "sudo chmod +x /tmp/install_docker.sh",
-//      "sudo /tmp/install_docker.sh"
-//    ]
-//  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "sudo usermod -aG docker ${var.admin_username}"
-    ]
+  tags {
+    role = "worker"
   }
 }
+
+resource "azurerm_virtual_machine_extension" "setup_worker_docker_group" {
+  name = "worker-${count.index}-dockerGroup"
+  resource_group_name = "${azurerm_resource_group.rg.name}"
+  location = "${azurerm_resource_group.rg.location}"
+  virtual_machine_name = "${element(azurerm_virtual_machine.worker.*.name, count.index)}"
+  publisher = "Microsoft.Azure.Extensions"
+  type = "CustomScript"
+  type_handler_version = "2.0"
+  auto_upgrade_minor_version = true
+  count = "${var.worker_count}"
+  depends_on = ["azurerm_virtual_machine.worker"]
+
+  protected_settings = <<SETTINGS
+   {
+     "commandToExecute": "sudo usermod -a -G docker ${var.admin_username}"
+   }
+   SETTINGS
+}
+
+resource "azurerm_public_ip" "master-pip" {
+  name                         = "master-pip-${count.index}"
+  location                     = "${azurerm_resource_group.rg.location}"
+  resource_group_name          = "${azurerm_resource_group.rg.name}"
+  public_ip_address_allocation = "Dynamic"
+  domain_name_label            = "${var.clustername}-${count.index}"
+
+  count = "${var.master_count}"
+}
+
+resource "azurerm_network_interface" "master-nic" {
+  name                = "master-nic-${count.index}"
+  location            = "${azurerm_resource_group.rg.location}"
+  resource_group_name = "${azurerm_resource_group.rg.name}"
+  internal_dns_name_label = "master-${count.index}"
+
+  ip_configuration {
+    name                          = "master-ipconfig-${count.index}"
+    subnet_id                     = "${azurerm_subnet.rancher-instance-subnet.id}"
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = "${element(azurerm_public_ip.master-pip.*.id, count.index)}"
+  }
+
+  count = "${var.master_count}"
+}
+
+resource "azurerm_virtual_machine" "master" {
+  name                  = "master-node-${count.index}"
+  location              = "${azurerm_resource_group.rg.location}"
+  resource_group_name   = "${azurerm_resource_group.rg.name}"
+  vm_size               = "${var.instance_size}"
+  network_interface_ids = ["${element(azurerm_network_interface.master-nic.*.id, count.index)}"]
+  count                 = "${var.master_count}"
+
+  storage_image_reference {
+    id = "${azurerm_image.ubuntu_docker.id}"
+  }
+
+  storage_os_disk {
+    name          = "master-osdisk-${count.index}"
+    create_option = "FromImage"
+  }
+
+  delete_os_disk_on_termination = true
+
+  os_profile {
+    admin_username = "${var.admin_username}"
+    computer_name = "master-${count.index}"
+  }
+
+  os_profile_linux_config {
+    disable_password_authentication = true
+
+    ssh_keys {
+      path = "/home/rke/.ssh/authorized_keys"
+      key_data = "${var.ssh_public_key}"
+    }
+  }
+
+  tags {
+    role = "controlplane,etcd"
+  }
+}
+
+resource "azurerm_virtual_machine_extension" "setup_master_docker_group" {
+  name = "master-${count.index}-dockerGroup"
+  resource_group_name = "${azurerm_resource_group.rg.name}"
+  location = "${azurerm_resource_group.rg.location}"
+  virtual_machine_name = "${element(azurerm_virtual_machine.master.*.name, count.index)}"
+  publisher = "Microsoft.Azure.Extensions"
+  type = "CustomScript"
+  type_handler_version = "2.0"
+  auto_upgrade_minor_version = true
+  count = "${var.master_count}"
+  depends_on = ["azurerm_virtual_machine.master"]
+
+  protected_settings = <<SETTINGS
+   {
+     "commandToExecute": "sudo usermod -a -G docker ${var.admin_username}"
+   }
+   SETTINGS
+}
+
+//resource "random_string" "password" {
+//  length = 16
+//  special = true
+//}
+//
+//resource "azurerm_public_ip" "master-ip" {
+//  name                         = "master-ip"
+//  location                     = "${azurerm_resource_group.rg.location}"
+//  resource_group_name          = "${azurerm_resource_group.rg.name}"
+//  public_ip_address_allocation = "static"
+//  domain_name_label            = "${var.fqdn_label_prefix}master"
+//}
+//
+//resource "azurerm_lb" "master-lb" {
+//  name                = "rkeMasterLB"
+//  location            = "${azurerm_resource_group.rg.location}"
+//  resource_group_name = "${azurerm_resource_group.rg.name}"
+//
+//  frontend_ip_configuration {
+//    name                 = "MasterPublicIp"
+//    public_ip_address_id = "${azurerm_public_ip.master-ip.id}"
+//  }
+//}
+//
+//resource "azurerm_lb_backend_address_pool" "master-backend-pool" {
+//  resource_group_name = "${azurerm_resource_group.rg.name}"
+//  loadbalancer_id     = "${azurerm_lb.master-lb.id}"
+//  name                = "MasterBackEndAddressPool"
+//}
+//
+//resource "azurerm_lb_nat_pool" "masterlbnatpool" {
+//  count                          = 3
+//  resource_group_name            = "${azurerm_resource_group.rg.name}"
+//  name                           = "ssh"
+//  loadbalancer_id                = "${azurerm_lb.master-lb.id}"
+//  protocol                       = "Tcp"
+//  frontend_port_start            = 22
+//  frontend_port_end              = 50
+//  backend_port                   = 22
+//  frontend_ip_configuration_name = "MasterPublicIp"
+//}
+//
+//resource azurerm_virtual_machine_scale_set "master" {
+//
+//  name = "masterscalegroup"
+//  location = "${azurerm_resource_group.rg.location}"
+//  resource_group_name = "${azurerm_resource_group.rg.name}"
+//
+//  upgrade_policy_mode = "Manual"
+//
+//  "sku" {
+//    capacity = 1
+//    name = "${var.vm_size}"
+//  }
+//
+//  os_profile {
+//    admin_username = "${var.admin_username}"
+//    computer_name_prefix = "rkemaster-"
+//    admin_password = "${random_string.password.result}"
+//  }
+//
+//  os_profile_linux_config {
+//    disable_password_authentication = true
+//
+//    ssh_keys {
+//      path = "/home/rke/.ssh/authorized_keys"
+//      key_data = "${var.ssh_public_key}"
+//    }
+//  }
+//
+//  storage_profile_image_reference {
+//    id = "${azurerm_image.hostos.id}"
+//  }
+//
+//  "storage_profile_os_disk" {
+//    name              = ""
+//    caching           = "ReadWrite"
+//    create_option = "FromImage"
+//    managed_disk_type = "Standard_LRS"
+//  }
+//
+//  network_profile {
+//    name    = "rkemaster-nic"
+//    primary = true
+//
+//    ip_configuration {
+//      name                                   = "rkemaster-ipconfig"
+//      subnet_id                              = "${azurerm_subnet.nodes.id}"
+//      load_balancer_backend_address_pool_ids = ["${azurerm_lb_backend_address_pool.master-backend-pool.id}"]
+//      load_balancer_inbound_nat_rules_ids    = ["${element(azurerm_lb_nat_pool.masterlbnatpool.*.id, count.index)}"]
+//    }
+//  }
+//
+//  provisioner "remote-exec" {
+//    inline = [
+//      "sudo usermod -aG docker ${var.admin_username}"
+//    ]
+//  }
+//
+//}

@@ -13,3 +13,6 @@
 .*.yml
 
 *.log
+
+# K8s
+.configs
