@@ -19,18 +19,27 @@ resource "azurerm_network_interface" "bastion-nic" {
   }
 }
 
+resource "azurerm_image" "ubuntu_bastion" {
+  name = "ubuntu_bastion"
+  location = "${azurerm_resource_group.rg.location}"
+  resource_group_name = "${azurerm_resource_group.rg.name}"
+
+  os_disk {
+    os_type = "Linux"
+    os_state = "Generalized"
+    blob_uri = "https://k8svhds.blob.core.windows.net/system/Microsoft.Compute/Images/ubuntu/ubuntu-bastion-osDisk.6251f6bb-e465-4077-aaeb-bd20fe43a3a1.vhd"
+  }
+}
+
 resource "azurerm_virtual_machine" "bastion" {
   name                  = "bastion"
   location              = "${azurerm_resource_group.rg.location}"
   resource_group_name   = "${azurerm_resource_group.rg.name}"
-  vm_size               = "Standard_B1s"
+  vm_size               = "Standard_A1_v2"
   network_interface_ids = ["${azurerm_network_interface.bastion-nic.id}"]
 
   storage_image_reference {
-    publisher = "${var.bastion_image_publisher}"
-    offer     = "${var.bastion_image_offer}"
-    sku       = "${var.bastion_image_sku}"
-    version   = "${var.bastion_image_version}"
+    id = "${azurerm_image.ubuntu_bastion.id}"
   }
 
   storage_os_disk {
@@ -42,7 +51,7 @@ resource "azurerm_virtual_machine" "bastion" {
 
   os_profile {
     admin_username = "${var.admin_username}"
-    computer_name = "node${count.index}"
+    computer_name = "bastion"
   }
 
   os_profile_linux_config {
@@ -57,10 +66,14 @@ resource "azurerm_virtual_machine" "bastion" {
 
 resource "null_resource" "provision" {
 
-  depends_on = ["azurerm_virtual_machine.master", "azurerm_virtual_machine.worker", "azurerm_virtual_machine.bastion", "azurerm_virtual_machine_extension.setup_master_docker_group", "azurerm_virtual_machine_extension.setup_worker_docker_group"]
+//  depends_on = ["azurerm_virtual_machine.master", "azurerm_virtual_machine.worker", "azurerm_virtual_machine.bastion", "azurerm_virtual_machine_extension.setup_master_docker_group", "azurerm_virtual_machine_extension.setup_worker_docker_group"]
+
+  depends_on = ["azurerm_virtual_machine_scale_set.master", "azurerm_virtual_machine.worker", "azurerm_virtual_machine.bastion", "azurerm_virtual_machine_extension.setup_worker_docker_group"]
 
   triggers {
-    masters = "${join(",", azurerm_virtual_machine.master.*.id)}"
+    //masters = "${join(",", azurerm_virtual_machine.master.*.id)}"
+    lb = "${azurerm_lb.master-lb.id}"
+    master = "${azurerm_virtual_machine_scale_set.master.id}"
     workers = "${join(",", azurerm_virtual_machine.worker.*.id)}"
   }
 
@@ -74,16 +87,6 @@ resource "null_resource" "provision" {
   }
 
   provisioner "file" {
-    source      = "scripts/install_rke.sh"
-    destination = "/tmp/install_rke.sh"
-  }
-
-  provisioner "file" {
-    source      = "scripts/install_kubectl.sh"
-    destination = "/tmp/install_kubectl.sh"
-  }
-
-  provisioner "file" {
     source      = "scripts/init_cluster.sh"
     destination = "/tmp/init_cluster.sh"
   }
@@ -94,14 +97,11 @@ resource "null_resource" "provision" {
   }
 
   provisioner "remote-exec" {
+
     inline = [
       "echo '${file("./templates/rke_base.tpl")}' > /home/rke/cluster.yaml",
       "echo '${join("\n", data.template_file.rke_master_node_definition.*.rendered)}' >>  /home/rke/cluster.yaml",
       "echo '${join("\n", data.template_file.rke_worker_node_definition.*.rendered)}' >>  /home/rke/cluster.yaml",
-      "sudo chmod +x /tmp/install_rke.sh",
-      "sudo /tmp/install_rke.sh",
-      "sudo chmod +x /tmp/install_kubectl.sh",
-      "sudo /tmp/install_kubectl.sh",
       "rke up --config /home/rke/cluster.yaml",
       "mkdir -p /home/rke/.kube",
       "cp /home/rke/kube_config_cluster.yaml /home/rke/.kube/config",
@@ -130,6 +130,6 @@ resource "null_resource" "init-cluster" {
   }
 
   provisioner "local-exec" {
-    command = "mkdir -p .configs && scp -i .ssh_keys/id_rsa ${var.admin_username}@${azurerm_public_ip.bastion-pip.fqdn}:.kube/admin.kubeconfig .configs"
+    command = "mkdir -p .configs && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh_keys/id_rsa ${var.admin_username}@${azurerm_public_ip.bastion-pip.fqdn}:.kube/admin.kubeconfig .configs"
   }
 }

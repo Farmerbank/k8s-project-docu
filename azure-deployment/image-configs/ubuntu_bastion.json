@@ -16,7 +16,7 @@
     "image_sku": "16.04-LTS",
 
     "capture_container_name": "ubuntu",
-    "capture_name_prefix": "ubuntu-docker",
+    "capture_name_prefix": "ubuntu-bastion",
 
     "azure_tags": {
       "os_version": "16.04 LTS",
@@ -30,8 +30,8 @@
     {
     "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} {{ .Path }}",
     "scripts": [
-      "install_docker.sh",
-      "pull_images.sh"
+      "../scripts/install_rke.sh",
+      "../scripts/install_kubectl.sh"
     ],
     "inline_shebang": "/bin/sh -x",
     "type": "shell"

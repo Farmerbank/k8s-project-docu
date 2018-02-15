@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 cd /tmp
-curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-mv /tmp/kubectl /usr/local/bin/kubectl
+version=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+curl -LO https://storage.googleapis.com/kubernetes-release/release/${version}/bin/linux/amd64/kubectl
+sudo mv /tmp/kubectl /usr/local/bin/kubectl
 chmod +x /usr/local/bin/kubectl
